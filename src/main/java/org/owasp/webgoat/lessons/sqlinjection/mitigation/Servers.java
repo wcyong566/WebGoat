@@ -65,6 +65,9 @@ public class Servers {
   @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
   @ResponseBody
   public List<Server> sort(@RequestParam String column) throws Exception {
+    if (column == null || !column.matches("^[a-zA-Z0-9_]+$")) {
+      throw new IllegalArgumentException("Invalid column name");
+    }
     List<Server> servers = new ArrayList<>();
 
     try (var connection = dataSource.getConnection()) {
