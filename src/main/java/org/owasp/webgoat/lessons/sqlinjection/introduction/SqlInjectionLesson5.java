@@ -73,11 +73,21 @@ public class SqlInjectionLesson5 extends AssignmentEndpoint {
   }
 
   protected AttackResult injectableQuery(String query) {
+    // Validate the query to prevent SQL injection attacks on the shared database
+    if (!isValidLessonQuery(query)) {
+      return failed(this)
+          .output(
+              "Invalid query. This lesson only accepts GRANT statements on the grant_rights table to"
+                  + " unauthorized_user.<br> Your query was: "
+                  + query)
+          .build();
+    }
+
     try (Connection connection = dataSource.getConnection()) {
       try (Statement statement =
           connection.createStatement(
               ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE)) {
-        statement.executeQuery(query);
+        statement.execute(query);
         if (checkSolution(connection)) {
           return success(this).build();
         }
@@ -89,6 +99,110 @@ public class SqlInjectionLesson5 extends AssignmentEndpoint {
               this.getClass().getName() + " : " + e.getMessage() + "<br> Your query was: " + query)
           .build();
     }
+  }
+
+  /**
+   * Validates that the query is a legitimate GRANT statement for the lesson and does not attempt to
+   * access other schemas or execute malicious SQL. This prevents SQL injection attacks on the
+   * shared database while maintaining the educational purpose of the lesson.
+   *
+   * @param query the SQL query to validate
+   * @return true if the query is valid for this lesson, false otherwise
+   */
+  private boolean isValidLessonQuery(String query) {
+    if (query == null || query.trim().isEmpty()) {
+      return false;
+    }
+
+    String normalizedQuery = query.trim().toLowerCase();
+
+    // Must be a GRANT statement
+    if (!normalizedQuery.startsWith("grant")) {
+      return false;
+    }
+
+    // Must reference grant_rights table (the lesson's target table)
+    if (!normalizedQuery.contains("grant_rights")) {
+      return false;
+    }
+
+    // Must grant to unauthorized_user (the lesson's target user)
+    if (!normalizedQuery.contains("unauthorized_user")) {
+      return false;
+    }
+
+    // Block attempts to access other schemas (CONTAINER, PUBLIC, or other user schemas)
+    // Check for schema qualifiers with or without dots
+    if (normalizedQuery.contains("container.") 
+        || normalizedQuery.contains("container ") 
+        || normalizedQuery.contains("public.")
+        || normalizedQuery.contains("information_schema")) {
+      return false;
+    }
+
+    // Block attempts to change schema context
+    if (normalizedQuery.contains("set schema") 
+        || normalizedQuery.contains("set current schema")
+        || normalizedQuery.contains("set current_schema")) {
+      return false;
+    }
+
+    // Block SQL injection attempts using semicolons to chain commands
+    if (normalizedQuery.contains(";")) {
+      return false;
+    }
+
+    // Block comment-based injection attempts
+    if (normalizedQuery.contains("--") 
+        || normalizedQuery.contains("/*") 
+        || normalizedQuery.contains("*/")
+        || normalizedQuery.contains("#")) {
+      return false;
+    }
+
+    // Block subquery attempts
+    if (normalizedQuery.contains("select") 
+        || normalizedQuery.contains("union") 
+        || normalizedQuery.contains("insert")
+        || normalizedQuery.contains("update") 
+        || normalizedQuery.contains("delete")
+        || normalizedQuery.contains("drop")
+        || normalizedQuery.contains("create")
+        || normalizedQuery.contains("alter")
+        || normalizedQuery.contains("truncate")
+        || normalizedQuery.contains("exec")
+        || normalizedQuery.contains("execute")) {
+      return false;
+    }
+
+    // Block attempts to grant on multiple tables or to multiple users
+    // by limiting to a single occurrence of key keywords
+    int grantCount = countOccurrences(normalizedQuery, "grant");
+    int toCount = countOccurrences(normalizedQuery, " to ");
+    int onCount = countOccurrences(normalizedQuery, " on ");
+    
+    if (grantCount != 1 || toCount != 1 || onCount != 1) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Counts the number of occurrences of a substring in a string.
+   *
+   * @param str the string to search in
+   * @param substr the substring to search for
+   * @return the number of occurrences
+   */
+  private int countOccurrences(String str, String substr) {
+    int count = 0;
+    int index = 0;
+    while ((index = str.indexOf(substr, index)) != -1) {
+      count++;
+      index += substr.length();
+    }
+    return count;
   }
 
   private boolean checkSolution(Connection connection) {
