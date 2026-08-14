@@ -71,6 +71,17 @@ public class ProfileZipSlip extends ProfileUploadBase {
       while (entries.hasMoreElements()) {
         ZipEntry e = entries.nextElement();
         File f = new File(tmpZipDirectory.toFile(), e.getName());
+        
+        // Validate that the resolved path is within the extraction directory to prevent Zip Slip
+        String canonicalDestinationPath = f.getCanonicalPath();
+        String canonicalExtractionPath = tmpZipDirectory.toFile().getCanonicalPath();
+        if (!canonicalDestinationPath.startsWith(canonicalExtractionPath + File.separator) 
+            && !canonicalDestinationPath.equals(canonicalExtractionPath)) {
+          log.warn("Zip Slip attempt detected: entry '{}' would extract to '{}' outside of '{}'", 
+              e.getName(), canonicalDestinationPath, canonicalExtractionPath);
+          return failed(this).output("path-traversal-zip-slip.invalid-entry").build();
+        }
+        
         InputStream is = zip.getInputStream(e);
         Files.copy(is, f.toPath(), StandardCopyOption.REPLACE_EXISTING);
       }
