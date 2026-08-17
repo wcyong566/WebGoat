@@ -67,6 +67,7 @@ public class MailboxControllerTest {
   }
 
   @Test
+  @WithMockUser
   public void sendingMailShouldStoreIt() throws Exception {
     Email email =
         Email.builder()

@@ -47,7 +47,7 @@ public class WebSecurityConfig {
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
     http.authorizeHttpRequests(
-        auth -> auth.requestMatchers(HttpMethod.POST, "/fileupload").authenticated());
+        auth -> auth.requestMatchers(HttpMethod.POST, "/fileupload", "/mail").authenticated());
     http.authorizeHttpRequests(
         auth ->
             auth.requestMatchers(HttpMethod.GET, "/files", "/mail", "/requests").authenticated());

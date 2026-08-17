@@ -24,6 +24,7 @@ package org.owasp.webgoat.webwolf.mailbox;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.text.StringEscapeUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -58,6 +59,19 @@ public class MailboxController {
   @PostMapping("/mail")
   @ResponseStatus(HttpStatus.CREATED)
   public void sendEmail(@RequestBody Email email) {
+    // Sanitize email contents to prevent XSS attacks
+    if (email.getContents() != null) {
+      email.setContents(StringEscapeUtils.escapeHtml4(email.getContents()));
+    }
+    if (email.getTitle() != null) {
+      email.setTitle(StringEscapeUtils.escapeHtml4(email.getTitle()));
+    }
+    if (email.getSender() != null) {
+      email.setSender(StringEscapeUtils.escapeHtml4(email.getSender()));
+    }
+    if (email.getRecipient() != null) {
+      email.setRecipient(StringEscapeUtils.escapeHtml4(email.getRecipient()));
+    }
     mailboxRepository.save(email);
   }
 
