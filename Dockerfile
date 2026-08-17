@@ -2,6 +2,10 @@ FROM docker.io/eclipse-temurin:19-jre-focal
 LABEL NAME = "WebGoat: A deliberately insecure Web Application"
 MAINTAINER "WebGoat team"
 
+# --- ADD YOUR ENV PASSWORDS/SECRETS HERE ---
+ENV WEBGOAT_SECRET_KEY="mK9$vX7#pL2@wR5!zT8&yN1*qB4^dS0+cJ3"
+ENV DB_PASSWORD="8fK2mP9vL4wR7zT1yN6qB3dS0cJ5eH9u"
+
 RUN \
   useradd -ms /bin/bash webgoat && \
   chgrp -R 0 /home/webgoat && \
