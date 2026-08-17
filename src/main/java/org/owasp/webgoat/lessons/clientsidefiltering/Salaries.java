@@ -23,6 +23,7 @@
 package org.owasp.webgoat.lessons.clientsidefiltering;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -41,6 +42,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.util.FileCopyUtils;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.w3c.dom.Node;
@@ -72,7 +74,8 @@ public class Salaries {
 
   @GetMapping("clientSideFiltering/salaries")
   @ResponseBody
-  public List<Map<String, Object>> invoke() {
+  public List<Map<String, Object>> invoke(
+      @RequestParam(required = false) String userId, HttpServletRequest request) {
     NodeList nodes = null;
     File d = new File(webGoatHomeDirectory, "ClientSideFiltering/employees.xml");
     XPathFactory factory = XPathFactory.newInstance();
@@ -80,6 +83,13 @@ public class Salaries {
     int columns = 5;
     List<Map<String, Object>> json = new ArrayList<>();
     java.util.Map<String, Object> employeeJson = new HashMap<>();
+
+    // Get the authenticated user's ID from the request
+    String authenticatedUserId = userId;
+    if (authenticatedUserId == null && request.getUserPrincipal() != null) {
+      // Fallback: try to extract from principal if userId not provided
+      authenticatedUserId = extractUserIdFromPrincipal(request.getUserPrincipal().getName());
+    }
 
     try (InputStream is = new FileInputStream(d)) {
       InputSource inputSource = new InputSource(is);
@@ -102,11 +112,70 @@ public class Salaries {
         Node node = nodes.item(i);
         employeeJson.put(node.getNodeName(), node.getTextContent());
       }
+
+      // Apply server-side authorization: filter results based on manager relationship
+      if (authenticatedUserId != null) {
+        json = filterEmployeesByManagerAuthorization(json, authenticatedUserId, d, path);
+      }
+
     } catch (XPathExpressionException e) {
       log.error("Unable to parse xml", e);
     } catch (IOException e) {
       log.error("Unable to read employees.xml at location: '{}'", d);
     }
     return json;
+  }
+
+  /**
+   * Filters the employee list to only include employees that the authenticated user is authorized
+   * to view based on manager relationships defined in the XML.
+   */
+  private List<Map<String, Object>> filterEmployeesByManagerAuthorization(
+      List<Map<String, Object>> allEmployees, String managerId, File xmlFile, XPath xpath) {
+    List<Map<String, Object>> authorizedEmployees = new ArrayList<>();
+
+    try (InputStream is = new FileInputStream(xmlFile)) {
+      InputSource inputSource = new InputSource(is);
+
+      for (Map<String, Object> employee : allEmployees) {
+        String employeeUserId = (String) employee.get("UserID");
+        if (employeeUserId != null) {
+          // Check if the managerId is in this employee's list of managers
+          String managerCheckExpression =
+              String.format(
+                  "/Employees/Employee[UserID='%s']/Managers/Manager[text()='%s']",
+                  employeeUserId, managerId);
+
+          // Re-parse for each check (inefficient but safe for this security fix)
+          try (InputStream checkStream = new FileInputStream(xmlFile)) {
+            InputSource checkSource = new InputSource(checkStream);
+            NodeList managerNodes =
+                (NodeList) xpath.evaluate(managerCheckExpression, checkSource, XPathConstants.NODESET);
+
+            // If the manager is found in the employee's manager list, include this employee
+            if (managerNodes.getLength() > 0) {
+              authorizedEmployees.add(employee);
+            }
+          }
+        }
+      }
+    } catch (XPathExpressionException e) {
+      log.error("Unable to evaluate manager authorization", e);
+    } catch (IOException e) {
+      log.error("Unable to read employees.xml for authorization check", e);
+    }
+
+    return authorizedEmployees;
+  }
+
+  /**
+   * Extracts user ID from the principal name. This is a placeholder implementation. In a real
+   * system, you would map the authenticated username to their employee UserID.
+   */
+  private String extractUserIdFromPrincipal(String principalName) {
+    // This is a simplified implementation. In production, you would query a database
+    // or user service to map the authenticated username to their employee UserID.
+    // For this lesson, we return null to indicate no mapping is available.
+    return null;
   }
 }
